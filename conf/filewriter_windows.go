@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT
  *
- * Copyright (C) 2019-2021 WireGuard LLC. All Rights Reserved.
+ * Copyright (C) 2019-2026 WireGuard LLC. All Rights Reserved.
  */
 
 package conf
@@ -64,6 +64,7 @@ func writeLockedDownFile(destination string, overwrite bool, contents []byte) er
 		deleteIt()
 		return windows.ERROR_IO_INCOMPLETE
 	}
+	windows.FlushFileBuffers(handle)
 	fileRenameInfo := &struct {
 		replaceIfExists byte
 		rootDirectory   windows.Handle
@@ -75,7 +76,7 @@ func writeLockedDownFile(destination string, overwrite bool, contents []byte) er
 		} else {
 			return 0
 		}
-	}(), fileNameLength: uint32(len(destination16) - 1)}
+	}(), fileNameLength: uint32((len(destination16) - 1) * 2)}
 	if len(destination16) > len(fileRenameInfo.fileName) {
 		deleteIt()
 		return windows.ERROR_BUFFER_OVERFLOW
