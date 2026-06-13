@@ -1,0 +1,87 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.1.0), leave empty to use version from version.go'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write  # 仅允许创建 Release 和上传附件，不影响代码写入
+
+jobs:
+  build:
+    name: Build WireGuard Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read version from version.go
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep -oP '(?<=Number = ")[0-9.]+' version/version.go)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Determine release tag
+        id: tag
+        shell: bash
+        run: |
+          INPUT_TAG="${{ github.event.inputs.tag }}"
+          if [ -n "${INPUT_TAG}" ]; then
+            TAG="${INPUT_TAG}"
+          else
+            TAG="v${{ steps.version.outputs.version }}"
+          fi
+          # 去掉 v 前缀，用于文件命名
+          VERSION_PLAIN="${TAG#v}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version_plain=${VERSION_PLAIN}" >> $GITHUB_OUTPUT
+          echo "Release tag: ${TAG}, filename version: ${VERSION_PLAIN}"
+
+      - name: Cache downloaded dependencies
+        uses: actions/cache@v4
+        with:
+          path: .deps
+          key: deps-${{ hashFiles('build.bat') }}
+
+      - name: Build
+        shell: cmd
+        run: build.bat
+
+      - name: List build artifacts
+        shell: cmd
+        run: dir amd64\
+
+      - name: Rename artifacts
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.tag.outputs.version_plain }}"
+          Copy-Item amd64\wireguard.exe "wireguard-amd64-${ver}.exe"
+          Copy-Item amd64\wg.exe        "wg-amd64-${ver}.exe"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: |
+            wireguard-amd64-${{ steps.tag.outputs.version_plain }}.exe
+            wg-amd64-${{ steps.tag.outputs.version_plain }}.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
